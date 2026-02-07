@@ -6,6 +6,7 @@ import streamlit as st
 
 from prd_generator import generate_prd_from_notes
 from prd_evaluator import evaluate_prd_quality
+from safety import safety_check
 
 APP_TITLE = "AI PRD Generator (Notes → PRD + Evaluation)"
 
@@ -20,8 +21,10 @@ def render_prd_markdown(prd: dict) -> str:
     user_stories = prd.get("user_stories") or []
     if isinstance(user_stories, list) and user_stories and isinstance(user_stories[0], dict):
         stories_md = "\n".join(
-            [f"- **As a** {s.get('as_a','')} **I want** {s.get('i_want','')} **so that** {s.get('so_that','')}"
-             for s in user_stories]
+            [
+                f"- **As a** {s.get('as_a','')} **I want** {s.get('i_want','')} **so that** {s.get('so_that','')}"
+                for s in user_stories
+            ]
         ) or "_(none)_"
     else:
         stories_md = bullet_list(user_stories)
@@ -63,6 +66,7 @@ def main() -> None:
     with st.sidebar:
         st.subheader("Settings")
         run_eval = st.checkbox("Run PRD quality evaluation (scores)", value=True)
+        use_moderation = st.checkbox("Use moderation (recommended)", value=True)
         st.divider()
         st.write("Tip: Start with 6–10 bullet notes.")
 
@@ -80,7 +84,6 @@ def main() -> None:
 - Want to pilot in Greece first
 - Need copy button and PDF export
 """
-
         notes = st.text_area("Notes / transcript", value=default_notes, height=220)
 
         col_a, col_b = st.columns([1, 2])
@@ -92,6 +95,12 @@ def main() -> None:
         if generate_btn:
             if not notes.strip():
                 st.error("Please add notes first.")
+                st.stop()
+
+            # Safety gate (prompt-injection + optional moderation)
+            safety = safety_check(notes, use_moderation=use_moderation)
+            if not safety.ok:
+                st.error(safety.reason)
                 st.stop()
 
             with st.spinner("Generating PRD from notes..."):
@@ -161,3 +170,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
